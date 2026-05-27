@@ -7,22 +7,25 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent"
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+MODEL = "llama3-70b-8192"
 
-def call_gemini(prompt, temperature=0.3, max_tokens=3000):
-    if not GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY not set")
-    url = f"{GEMINI_URL}?key={GEMINI_API_KEY}"
+def call_groq(prompt, temperature=0.3, max_tokens=3000):
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY not set")
     payload = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens}
+        "model": MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "max_tokens": max_tokens
     }).encode("utf-8")
-    req = urllib.request.Request(url, data=payload,
-          headers={"Content-Type": "application/json"}, method="POST")
+    req = urllib.request.Request(GROQ_URL, data=payload,
+          headers={"Content-Type": "application/json",
+                   "Authorization": f"Bearer {GROQ_API_KEY}"}, method="POST")
     with urllib.request.urlopen(req, timeout=30) as res:
         data = json.loads(res.read().decode("utf-8"))
-        return data["candidates"][0]["content"]["parts"][0]["text"]
+        return data["choices"][0]["message"]["content"]
 
 def clean_json(raw):
     raw = raw.strip()
@@ -77,11 +80,11 @@ def review_code():
     language = data.get("language", "python")
     if not code:
         return jsonify({"error": "No code provided"}), 400
-    if not GEMINI_API_KEY:
-        return jsonify({"error": "GEMINI_API_KEY not set"}), 500
+    if not GROQ_API_KEY:
+        return jsonify({"error": "GROQ_API_KEY not set"}), 500
     try:
         prompt = REVIEW_PROMPT + f"\n\nReview this {language} code:\n```{language}\n{code}\n```"
-        raw = call_gemini(prompt)
+        raw = call_groq(prompt)
         result = json.loads(clean_json(raw))
         result["language"] = language
         result["timestamp"] = datetime.now().strftime("%d %b %Y, %H:%M:%S")
@@ -92,7 +95,7 @@ def review_code():
         return jsonify({"error": "AI parsing failed. Try again."}), 500
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8")
-        return jsonify({"error": f"Gemini API error {e.code}: {body}"}), 500
+        return jsonify({"error": f"Groq API error {e.code}: {body}"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -121,12 +124,12 @@ Respond ONLY with JSON, no markdown:
   "changes": ["<change 1>", "<change 2>"],
   "explanation": "<brief summary of all fixes>"
 }}"""
-        raw = call_gemini(prompt, temperature=0.2)
+        raw = call_groq(prompt, temperature=0.2)
         result = json.loads(clean_json(raw))
         return jsonify(result)
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8")
-        return jsonify({"error": f"Gemini API error {e.code}: {body}"}), 500
+        return jsonify({"error": f"Groq API error {e.code}: {body}"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -152,11 +155,11 @@ Code ({language}):
 
 {history_text}User: {question}
 Assistant:"""
-        answer = call_gemini(prompt, temperature=0.5, max_tokens=1000)
+        answer = call_groq(prompt, temperature=0.5, max_tokens=1000)
         return jsonify({"answer": answer.strip()})
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8")
-        return jsonify({"error": f"Gemini API error {e.code}: {body}"}), 500
+        return jsonify({"error": f"Groq API error {e.code}: {body}"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -164,8 +167,8 @@ Assistant:"""
 def status():
     return jsonify({
         "status": "running",
-        "model": "gemini-1.5-flash-latest",
-        "api_key_set": bool(GEMINI_API_KEY),
+        "model": MODEL,
+        "api_key_set": bool(GROQ_API_KEY),
         "timestamp": datetime.utcnow().isoformat() + "Z"
     })
 
