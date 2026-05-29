@@ -7,22 +7,26 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-MODEL = "llama3-70b-8192"
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+MODEL = "meta-llama/llama-3-70b-instruct"
 
-def call_groq(prompt, temperature=0.3, max_tokens=3000):
-    if not GROQ_API_KEY:
-        raise ValueError("GROQ_API_KEY not set")
+def call_llm(prompt, temperature=0.3, max_tokens=3000):
+    if not OPENROUTER_API_KEY:
+        raise ValueError("OPENROUTER_API_KEY not set")
     payload = json.dumps({
         "model": MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": temperature,
         "max_tokens": max_tokens
     }).encode("utf-8")
-    req = urllib.request.Request(GROQ_URL, data=payload,
-          headers={"Content-Type": "application/json",
-                   "Authorization": f"Bearer {GROQ_API_KEY}"}, method="POST")
+    req = urllib.request.Request(OPENROUTER_URL, data=payload,
+          headers={
+              "Content-Type": "application/json",
+              "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+              "HTTP-Referer": "https://llm-code-review-production.up.railway.app",
+              "X-Title": "CodeSense AI"
+          }, method="POST")
     with urllib.request.urlopen(req, timeout=30) as res:
         data = json.loads(res.read().decode("utf-8"))
         return data["choices"][0]["message"]["content"]
@@ -80,11 +84,11 @@ def review_code():
     language = data.get("language", "python")
     if not code:
         return jsonify({"error": "No code provided"}), 400
-    if not GROQ_API_KEY:
-        return jsonify({"error": "GROQ_API_KEY not set"}), 500
+    if not OPENROUTER_API_KEY:
+        return jsonify({"error": "OPENROUTER_API_KEY not set"}), 500
     try:
         prompt = REVIEW_PROMPT + f"\n\nReview this {language} code:\n```{language}\n{code}\n```"
-        raw = call_groq(prompt)
+        raw = call_llm(prompt)
         result = json.loads(clean_json(raw))
         result["language"] = language
         result["timestamp"] = datetime.now().strftime("%d %b %Y, %H:%M:%S")
@@ -95,7 +99,7 @@ def review_code():
         return jsonify({"error": "AI parsing failed. Try again."}), 500
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8")
-        return jsonify({"error": f"Groq API error {e.code}: {body}"}), 500
+        return jsonify({"error": f"API error {e.code}: {body}"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -124,12 +128,12 @@ Respond ONLY with JSON, no markdown:
   "changes": ["<change 1>", "<change 2>"],
   "explanation": "<brief summary of all fixes>"
 }}"""
-        raw = call_groq(prompt, temperature=0.2)
+        raw = call_llm(prompt, temperature=0.2)
         result = json.loads(clean_json(raw))
         return jsonify(result)
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8")
-        return jsonify({"error": f"Groq API error {e.code}: {body}"}), 500
+        return jsonify({"error": f"API error {e.code}: {body}"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -155,11 +159,11 @@ Code ({language}):
 
 {history_text}User: {question}
 Assistant:"""
-        answer = call_groq(prompt, temperature=0.5, max_tokens=1000)
+        answer = call_llm(prompt, temperature=0.5, max_tokens=1000)
         return jsonify({"answer": answer.strip()})
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8")
-        return jsonify({"error": f"Groq API error {e.code}: {body}"}), 500
+        return jsonify({"error": f"API error {e.code}: {body}"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -168,7 +172,7 @@ def status():
     return jsonify({
         "status": "running",
         "model": MODEL,
-        "api_key_set": bool(GROQ_API_KEY),
+        "api_key_set": bool(OPENROUTER_API_KEY),
         "timestamp": datetime.utcnow().isoformat() + "Z"
     })
 
