@@ -110,5 +110,5 @@ llm-code-review/
 
 ## 📊 Resume Bullet
 
-> Built an LLM-powered code review assistant using Anthropic Claude claude-sonnet-4 and Flask; designed a custom prompt engineering pipeline to classify bugs, security vulnerabilities, and anti-patterns with structured JSON output; deployed on Render with GitHub Actions CI/CD for automated delivery.
+> Built an LLM-powered code review assistant using Flask; designed a custom prompt engineering pipeline to classify bugs, security vulnerabilities, and anti-patterns with structured JSON output; deployed on Render with GitHub Actions CI/CD for automated delivery.
 > **Tech Stack:** Python, Flask, Anthropic Claude API, HTML5, CSS3, JavaScript, Render, GitHub Actions.
